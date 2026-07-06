@@ -4,55 +4,66 @@ import json
 import os
 
 def fetch_and_convert():
+    # URL สำหรับดึงข้อมูลจากกรมอุตุนิยมวิทยา
     url = "https://data.tmd.go.th/api/WeatherWarningNews/v2/"
     params = {
         "uid": "demo",
         "ukey": "demokey"
     }
-    
     headers = {
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
     
-    response = requests.get(url, params=params, headers=headers)
-    
-    if response.status_code == 200:
-        try:
-            root = ET.fromstring(response.content)
-            features = []
-            
-            # โครงสร้าง XML ของ TMD มักจะมีรายการ Warning อยู่ข้างใน
-            for w in root.findall('Warning'):
-                # ดึงข้อมูลจาก XML
-                title = w.find('TitleThai').text if w.find('TitleThai') is not None else "ไม่มีหัวข้อ"
-                headline = w.find('HeadlineThai').text if w.find('HeadlineThai') is not None else ""
-                
-                # เนื่องจากพิกัดไม่ได้เป็นตัวเลขแยกต่างหาก เราอาจต้องให้จุดศูนย์กลางไว้ที่ไทยก่อน 
-                # หรือหาคำใน Description หากคุณต้องการ Plot บนแผนที่
-                feature = {
-                    "type": "Feature",
-                    "geometry": {"type": "Point", "coordinates": [100.5018, 13.7563]}, # พิกัดกรุงเทพฯ (เบื้องต้น)
-                    "properties": {
-                        "title": title,
-                        "headline": headline,
-                        "date": w.find('AnnounceDate').text if w.find('AnnounceDate') is not None else ""
-                    }
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        if response.status_code != 200:
+            print(f"Failed to fetch data: {response.status_code}")
+            return
+
+        # ทำความสะอาดข้อมูล XML ก่อน parse (ป้องกัน Error จากตัวอักษรพิเศษบางตัว)
+        root = ET.fromstring(response.content)
+        features = []
+        
+        # วนลูปดึงข้อมูลแต่ละ Warning
+        for w in root.findall('Warning'):
+            # ฟังก์ชันช่วยดึงค่า text เพื่อกันค่า None
+            def get_text(tag_name):
+                node = w.find(tag_name)
+                return node.text.strip() if (node is not None and node.text) else ""
+
+            # สร้าง Feature สำหรับ GeoJSON
+            feature = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point", 
+                    "coordinates": [100.5018, 13.7563] # พิกัดอ้างอิงเบื้องต้น
+                },
+                "properties": {
+                    "title": get_text('TitleThai'),
+                    "headline": get_text('HeadlineThai'),
+                    "description": get_text('DescriptionThai'),
+                    "issueNo": get_text('IssueNo'),
+                    "announceDate": get_text('AnnounceDate'),
+                    "webUrl": get_text('WebUrlThai')
                 }
-                features.append(feature)
-                
-            geojson = {"type": "FeatureCollection", "features": features}
+            }
+            features.append(feature)
             
-            if not os.path.exists('data'):
-                os.makedirs('data')
-                
-            with open('data/storm.geojson', 'w', encoding='utf-8') as f:
-                json.dump(geojson, f, ensure_ascii=False, indent=4)
-            print("Successfully updated storm.geojson")
+        # สร้างโครงสร้าง GeoJSON
+        geojson = {"type": "FeatureCollection", "features": features}
+        
+        # ตรวจสอบและสร้างโฟลเดอร์ data
+        if not os.path.exists('data'):
+            os.makedirs('data')
             
-        except Exception as e:
-            print(f"Error parsing XML: {e}")
-    else:
-        print(f"Failed to fetch data: {response.status_code}")
+        # บันทึกไฟล์
+        with open('data/storm.geojson', 'w', encoding='utf-8') as f:
+            json.dump(geojson, f, ensure_ascii=False, indent=4)
+            
+        print(f"Successfully processed {len(features)} warnings.")
+
+    except Exception as e:
+        print(f"Error occurred: {e}")
 
 if __name__ == "__main__":
     fetch_and_convert()
