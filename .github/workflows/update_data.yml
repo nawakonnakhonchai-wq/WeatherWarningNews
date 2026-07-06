@@ -1,0 +1,25 @@
+name: Update Weather Data
+on:
+  schedule:
+    - cron: '0 * * * *' # รันทุกๆ 1 ชั่วโมง
+  workflow_dispatch: # ให้เรากดรันด้วยตัวเองได้ด้วย
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with: {python-version: '3.9'}
+      - name: Install requirements
+        run: pip install requests
+      - name: Run script
+        run: python main.py
+      - name: Commit and push
+        run: |
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add data/storm.geojson
+          git commit -m "Update weather data" || exit 0
+          git push
