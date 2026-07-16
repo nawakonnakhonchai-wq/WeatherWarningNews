@@ -1,4 +1,24 @@
 {
     "type": "FeatureCollection",
-    "features": []
+    "features": [
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    100.5018,
+                    13.7563
+                ]
+            },
+            "properties": {
+                "title": "ไม่พบข้อมูลการแจ้งเตือนในขณะนี้",
+                "headline": "ไม่พบข้อมูลการแจ้งเตือนในขณะนี้",
+                "description": "ไม่มีประกาศเตือนภัยจากกรมอุตุนิยมวิทยา ณ เวลาที่ตรวจสอบล่าสุด (2026-07-16 11:17:12 น.)",
+                "issueNo": "",
+                "announceDate": "2026-07-16 11:17:12",
+                "webUrl": "",
+                "status": "no_data"
+            }
+        }
+    ]
 }
