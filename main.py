@@ -2,6 +2,7 @@ import requests
 import xml.etree.ElementTree as ET
 import json
 import os
+from datetime import datetime, timezone, timedelta
 
 def fetch_and_convert():
     # URL สำหรับดึงข้อมูลจากกรมอุตุนิยมวิทยา
@@ -13,30 +14,27 @@ def fetch_and_convert():
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
-    
+
     try:
         response = requests.get(url, params=params, headers=headers, timeout=10)
         if response.status_code != 200:
             print(f"Failed to fetch data: {response.status_code}")
             return
 
-        # ทำความสะอาดข้อมูล XML ก่อน parse (ป้องกัน Error จากตัวอักษรพิเศษบางตัว)
         root = ET.fromstring(response.content)
         features = []
-        
+
         # วนลูปดึงข้อมูลแต่ละ Warning
         for w in root.findall('Warning'):
-            # ฟังก์ชันช่วยดึงค่า text เพื่อกันค่า None
             def get_text(tag_name):
                 node = w.find(tag_name)
                 return node.text.strip() if (node is not None and node.text) else ""
 
-            # สร้าง Feature สำหรับ GeoJSON
             feature = {
                 "type": "Feature",
                 "geometry": {
-                    "type": "Point", 
-                    "coordinates": [100.5018, 13.7563] # พิกัดอ้างอิงเบื้องต้น
+                    "type": "Point",
+                    "coordinates": [100.5018, 13.7563]  # พิกัดอ้างอิงเบื้องต้น
                 },
                 "properties": {
                     "title": get_text('TitleThai'),
@@ -44,23 +42,48 @@ def fetch_and_convert():
                     "description": get_text('DescriptionThai'),
                     "issueNo": get_text('IssueNo'),
                     "announceDate": get_text('AnnounceDate'),
-                    "webUrl": get_text('WebUrlThai')
+                    "webUrl": get_text('WebUrlThai'),
+                    "status": "active"  # มีข้อมูลเตือนภัยจริง
                 }
             }
             features.append(feature)
-            
+
+        # เวลาปัจจุบัน (Asia/Bangkok, UTC+7)
+        now_th = datetime.now(timezone(timedelta(hours=7))).strftime('%Y-%m-%d %H:%M:%S')
+
+        # ถ้าไม่มี warning เลย ให้ใส่ placeholder feature แทน
+        # เพื่อไม่ให้ ArcGIS Online หา schema/field ไม่เจอแล้ว error
+        if not features:
+            features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [100.5018, 13.7563]
+                },
+                "properties": {
+                    "title": "ไม่พบข้อมูลการแจ้งเตือนในขณะนี้",
+                    "headline": "ไม่พบข้อมูลการแจ้งเตือนในขณะนี้",
+                    "description": f"ไม่มีประกาศเตือนภัยจากกรมอุตุนิยมวิทยา ณ เวลาที่ตรวจสอบล่าสุด ({now_th} น.)",
+                    "issueNo": "",
+                    "announceDate": now_th,
+                    "webUrl": "",
+                    "status": "no_data"  # ใช้แยกแยะใน dashboard ได้ว่าเป็น placeholder
+                }
+            })
+            print("No warning data found from TMD API. Placeholder feature written instead.")
+
         # สร้างโครงสร้าง GeoJSON
         geojson = {"type": "FeatureCollection", "features": features}
-        
+
         # ตรวจสอบและสร้างโฟลเดอร์ data
         if not os.path.exists('data'):
             os.makedirs('data')
-            
+
         # บันทึกไฟล์
         with open('data/storm.geojson', 'w', encoding='utf-8') as f:
             json.dump(geojson, f, ensure_ascii=False, indent=4)
-            
-        print(f"Successfully processed {len(features)} warnings.")
+
+        print(f"Successfully processed {len(features)} warning(s).")
 
     except Exception as e:
         print(f"Error occurred: {e}")
